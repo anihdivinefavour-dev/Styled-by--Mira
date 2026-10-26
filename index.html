@@ -58,7 +58,14 @@ footer{padding:25px 7%;background:#fff;border-top:1px solid #efd9e3;font-size:13
 <header>
   <div class="brand"><div class="logo">SM</div><div>Styled By Mira<br><small>SALOON & STUDIO</small></div></div>
   <nav>
-    <a href="#home">Home</a><a href="#services">Style List</a><a href="#gallery">Gallery</a><a href="#booking">Book Now</a><a href="#about">About</a><a href="#contact">Contact</a>
+    <a href="#home">Home</a><a href="#services">Style List</a><a href="#home">Home</a>
+<a href="#services">Style List</a>
+<a href="#gallery">Gallery</a>
+<a href="#booking">Book Now</a>
+<a href="#about">About</a>
+<a href="#contact">Contact</a>
+<a href="#account">Customer Login</a>
+<a href="#owner-login">Owner Login</a>
     <button type="button" id="viewCart">Cart (<span id="count">0</span>)</button>
   </nav>
 </header>
@@ -133,7 +140,50 @@ footer{padding:25px 7%;background:#fff;border-top:1px solid #efd9e3;font-size:13
     </form>
   </div>
 </section>
+<section id="account" style="background:#fff0f6">
+  <h2>Customer Account</h2>
+  <p>Sign in or create an account to access customer features.</p>
 
+  <div class="card">
+    <form id="customerLoginForm">
+      <div class="fields">
+        <input name="email" type="email"
+          placeholder="Email address" required>
+        <input name="password" type="password"
+          placeholder="Password" minlength="8" required>
+      </div>
+      <button type="submit">Customer Login</button>
+      <button type="button" id="customerRegister">Create Account</button>
+      <button type="button" id="customerLogout">Logout</button>
+      <p id="customerMessage" role="status" aria-live="polite"></p>
+    </form>
+  </div>
+</section>
+
+<section id="owner-login">
+  <h2>Owner Login</h2>
+  <p>Restricted to authorized salon owners.</p>
+
+  <div class="card">
+    <form id="ownerLoginForm">
+      <div class="fields">
+        <input name="email" type="email"
+          placeholder="Owner email address" required>
+        <input name="password" type="password"
+          placeholder="Password" required>
+      </div>
+      <button type="submit">Sign In as Owner</button>
+      <button type="button" id="ownerLogout">Owner Logout</button>
+      <p id="ownerMessage" role="status" aria-live="polite"></p>
+    </form>
+
+    <div id="ownerDashboard" hidden>
+      <h3>Owner Dashboard</h3>
+      <p id="ownerWelcome"></p>
+      <p>Owner access verified. Booking management can be added next.</p>
+    </div>
+  </div>
+</section>
 <section id="payment">
   <h2>Payments</h2>
   <div class="card"><h3>Paystack</h3><p>Online payment will be enabled after secure Paystack checkout and payment verification are configured. Do not use this preview to collect real payments yet.</p></div>
