@@ -309,6 +309,146 @@ document.getElementById('bookingForm').addEventListener('submit', async event =>
     submit.textContent = 'Send Booking Request';
   }
 });
+// Customer authentication
+const customerForm = document.getElementById('customerLoginForm');
+const customerMessage = document.getElementById('customerMessage');
+
+customerForm.addEventListener('submit', async event => {
+  event.preventDefault();
+
+  if (!supabaseClient) {
+    customerMessage.textContent = 'Supabase connection is unavailable.';
+    return;
+  }
+
+  const data = new FormData(customerForm);
+  const { error } = await supabaseClient.auth.signInWithPassword({
+    email: String(data.get('email')).trim(),
+    password: String(data.get('password'))
+  });
+
+  customerMessage.textContent = error
+    ? 'Sign-in failed. Check your details and try again.'
+    : 'You are signed in.';
+});
+
+document.getElementById('customerRegister').addEventListener('click', async () => {
+  if (!supabaseClient) {
+    customerMessage.textContent = 'Supabase connection is unavailable.';
+    return;
+  }
+
+  const data = new FormData(customerForm);
+  const email = String(data.get('email')).trim();
+  const password = String(data.get('password'));
+
+  if (!email || password.length < 8) {
+    customerMessage.textContent =
+      'Enter your email and a password of at least 8 characters.';
+    return;
+  }
+
+  const { error } = await supabaseClient.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: window.location.origin + window.location.pathname
+    }
+  });
+
+  customerMessage.textContent = error
+    ? 'Registration failed. Please try again later.'
+    : 'Registration submitted. Check your email if confirmation is required.';
+});
+
+document.getElementById('customerLogout').addEventListener('click', async () => {
+  if (!supabaseClient) return;
+  const { error } = await supabaseClient.auth.signOut();
+  customerMessage.textContent = error ? 'Logout failed.' : 'You have signed out.';
+});
+
+// Owner authentication: verify the database role after sign-in.
+const ownerForm = document.getElementById('ownerLoginForm');
+const ownerMessage = document.getElementById('ownerMessage');
+const ownerDashboard = document.getElementById('ownerDashboard');
+
+async function verifyOwner() {
+  ownerDashboard.hidden = true;
+
+  if (!supabaseClient) return false;
+
+  const { data: sessionData, error: sessionError } =
+    await supabaseClient.auth.getSession();
+
+  const user = sessionData?.session?.user;
+
+  if (sessionError || !user) {
+    ownerMessage.textContent = 'Please sign in with an owner account.';
+    return false;
+  }
+
+  const { data: profile, error } = await supabaseClient
+    .from('profiles')
+    .select('role, full_name')
+    .eq('id', user.id)
+    .single();
+
+  if (error || profile?.role !== 'owner') {
+    await supabaseClient.auth.signOut();
+    ownerMessage.textContent =
+      'Access denied. This account is not authorized as an owner.';
+    return false;
+  }
+
+  ownerMessage.textContent = 'Owner access verified.';
+  document.getElementById('ownerWelcome').textContent =
+    'Welcome, ' + (profile.full_name || user.email);
+  ownerDashboard.hidden = false;
+  return true;
+}
+
+ownerForm.addEventListener('submit', async event => {
+  event.preventDefault();
+
+  if (!supabaseClient) {
+    ownerMessage.textContent = 'Supabase connection is unavailable.';
+    return;
+  }
+
+  const data = new FormData(ownerForm);
+  ownerMessage.textContent = 'Signing in...';
+
+  const { error } = await supabaseClient.auth.signInWithPassword({
+    email: String(data.get('email')).trim(),
+    password: String(data.get('password'))
+  });
+
+  if (error) {
+    ownerMessage.textContent =
+      'Sign-in failed. Check your credentials or reset your password.';
+    return;
+  }
+
+  await verifyOwner();
+});
+
+document.getElementById('ownerLogout').addEventListener('click', async () => {
+  if (!supabaseClient) return;
+
+  const { error } = await supabaseClient.auth.signOut();
+  ownerDashboard.hidden = true;
+  ownerMessage.textContent = error
+    ? 'Logout failed.'
+    : 'You have signed out.';
+});
+
+if (supabaseClient) {
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (!session) {
+      ownerDashboard.hidden = true;
+    }
+  });
+}
 </script>
 </body>
 </html>
