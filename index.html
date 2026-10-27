@@ -160,6 +160,7 @@ footer{padding:25px 7%;background:#fff;border-top:1px solid #efd9e3;font-size:13
       <button type="button" id="customerLogout">Logout</button>
       <p id="customerMessage" role="status" aria-live="polite"></p>
     </form>
+    <div id="customerBookingsPanel" class="card" hidden style="margin-top:16px"><h3>My Bookings</h3><p id="customerBookingsMessage" role="status" aria-live="polite"></p><div id="customerBookings"></div></div>
   </div>
 </section>
 
@@ -382,6 +383,7 @@ document.getElementById('customerLogout').addEventListener('click', async () => 
   if (!supabaseClient) return;
   const { error } = await supabaseClient.auth.signOut();
   ownerDashboard.hidden = true;
+  document.getElementById('customerBookingsPanel').hidden = true;
   customerMessage.textContent = error ? 'Logout failed.' : 'You have signed out.';
 });
 
@@ -413,6 +415,22 @@ async function loadOwnerBookings() {
   });
 }
 
+async function loadCustomerBookings(user) {
+  const panel = document.getElementById('customerBookingsPanel');
+  const list = document.getElementById('customerBookings');
+  const status = document.getElementById('customerBookingsMessage');
+  panel.hidden = false; list.replaceChildren(); status.textContent = 'Loading your bookings…';
+  const { data: rows, error } = await supabaseClient.from('bookings').select('id, service_name, booking_type, scheduled_at, status, notes').eq('customer_id', user.id).order('scheduled_at', { ascending: false });
+  if (error) { console.error('Customer booking fetch failed:', error); status.textContent = 'Your bookings could not be loaded right now.'; return; }
+  if (!rows || !rows.length) { status.textContent = 'You have no bookings yet.'; return; }
+  status.textContent = rows.length + ' booking(s)';
+  rows.forEach(booking => {
+    const card = document.createElement('article'); card.className = 'card'; card.style.margin = '10px 0';
+    const title = document.createElement('h3'); title.textContent = booking.service_name || 'Salon appointment'; card.appendChild(title);
+    const detail = document.createElement('p'); detail.textContent = [booking.booking_type || 'Appointment', new Date(booking.scheduled_at).toLocaleString(), 'Status: ' + (booking.status || 'pending'), booking.notes].filter(Boolean).join(' · '); card.appendChild(detail); list.appendChild(card);
+  });
+}
+
 async function routeSignedInUser(user) {
   if (!user || !supabaseClient) return;
   const { data: profile, error } = await supabaseClient
@@ -425,10 +443,12 @@ async function routeSignedInUser(user) {
     ownerDashboard.hidden = false;
     document.getElementById('ownerWelcome').textContent = 'Welcome, ' + (profile.full_name || user.email);
     customerMessage.textContent = 'Owner access verified.';
+    document.getElementById('customerBookingsPanel').hidden = true;
     await loadOwnerBookings();
   } else {
     ownerDashboard.hidden = true;
     customerMessage.textContent = 'You are signed in.';
+    await loadCustomerBookings(user);
   }
 }
 
