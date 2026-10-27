@@ -64,8 +64,8 @@ footer{padding:25px 7%;background:#fff;border-top:1px solid #efd9e3;font-size:13
 <a href="#booking">Book Now</a>
 <a href="#about">About</a>
 <a href="#contact">Contact</a>
-<a href="#account">Customer Login</a>
-<a href="#owner-login">Owner Login</a>
+<a href="#account">Sign In / Create Account</a>
+
     <button type="button" id="viewCart">Cart (<span id="count">0</span>)</button>
   </nav>
 </header>
@@ -152,8 +152,10 @@ footer{padding:25px 7%;background:#fff;border-top:1px solid #efd9e3;font-size:13
         <input name="password" type="password"
           placeholder="Password" minlength="8" required>
       </div>
-      <button type="submit">Customer Login</button>
+      <button type="submit">Sign In</button>
       <button type="button" id="customerRegister">Create Account</button>
+      <button type="button" id="customerReset">Forgot Password?</button>
+      <button type="button" id="googleSignIn">Continue with Google</button>
       <button type="button" id="customerLogout">Logout</button>
       <p id="customerMessage" role="status" aria-live="polite"></p>
     </form>
@@ -172,8 +174,9 @@ footer{padding:25px 7%;background:#fff;border-top:1px solid #efd9e3;font-size:13
         <input name="password" type="password"
           placeholder="Password" required>
       </div>
-      <button type="submit">Sign In as Owner</button>
-      <button type="button" id="ownerLogout">Owner Logout</button>
+      <button type="submit">Sign In</button>
+      <button type="button" id="ownerReset">Forgot Password?</button>
+      <button type="button" id="ownerLogout">Sign Out</button>
       <p id="ownerMessage" role="status" aria-live="polite"></p>
     </form>
 
@@ -361,6 +364,37 @@ document.getElementById('customerRegister').addEventListener('click', async () =
     : 'Registration submitted. Check your email if confirmation is required.';
 });
 
+document.getElementById('customerReset').addEventListener('click', async () => {
+  if (!supabaseClient) {
+    customerMessage.textContent = 'Supabase connection is unavailable.';
+    return;
+  }
+  const email = String(new FormData(customerForm).get('email') || '').trim();
+  if (!email) {
+    customerMessage.textContent = 'Enter your email address first, then choose Forgot Password.';
+    return;
+  }
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+  customerMessage.textContent = error
+    ? 'Password recovery could not be started. Please try again later.'
+    : 'If this email is registered, password recovery instructions will be sent.';
+});
+
+document.getElementById('googleSignIn').addEventListener('click', async () => {
+  if (!supabaseClient) {
+    customerMessage.textContent = 'Supabase connection is unavailable.';
+    return;
+  }
+  const { error } = await supabaseClient.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.origin + window.location.pathname }
+  });
+  if (error) customerMessage.textContent =
+    'Google sign-in is not available yet. The Google provider may need to be configured in Supabase.';
+});
+
 document.getElementById('customerLogout').addEventListener('click', async () => {
   if (!supabaseClient) return;
   const { error } = await supabaseClient.auth.signOut();
@@ -430,6 +464,24 @@ ownerForm.addEventListener('submit', async event => {
   }
 
   await verifyOwner();
+});
+
+document.getElementById('ownerReset').addEventListener('click', async () => {
+  if (!supabaseClient) {
+    ownerMessage.textContent = 'Supabase connection is unavailable.';
+    return;
+  }
+  const email = String(new FormData(ownerForm).get('email') || '').trim();
+  if (!email) {
+    ownerMessage.textContent = 'Enter your owner email address first.';
+    return;
+  }
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+  ownerMessage.textContent = error
+    ? 'Password recovery could not be started. Please try again later.'
+    : 'If this email is registered, password recovery instructions will be sent.';
 });
 
 document.getElementById('ownerLogout').addEventListener('click', async () => {
