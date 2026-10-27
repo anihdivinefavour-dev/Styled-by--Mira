@@ -145,6 +145,7 @@ footer{padding:25px 7%;background:#fff;border-top:1px solid #efd9e3;font-size:13
   <p>Sign in or create an account to access customer features.</p>
 
   <div class="card">
+    <p>Owner accounts are recognized automatically after sign-in. Google sign-in remains optional until configured.</p>
     <form id="customerLoginForm">
       <div class="fields">
         <input name="email" type="email"
@@ -162,31 +163,6 @@ footer{padding:25px 7%;background:#fff;border-top:1px solid #efd9e3;font-size:13
   </div>
 </section>
 
-<section id="owner-login">
-  <h2>Owner Login</h2>
-  <p>Restricted to authorized salon owners.</p>
-
-  <div class="card">
-    <form id="ownerLoginForm">
-      <div class="fields">
-        <input name="email" type="email"
-          placeholder="Owner email address" required>
-        <input name="password" type="password"
-          placeholder="Password" required>
-      </div>
-      <button type="submit">Sign In</button>
-      <button type="button" id="ownerReset">Forgot Password?</button>
-      <button type="button" id="ownerLogout">Sign Out</button>
-      <p id="ownerMessage" role="status" aria-live="polite"></p>
-    </form>
-
-    <div id="ownerDashboard" hidden>
-      <h3>Owner Dashboard</h3>
-      <p id="ownerWelcome"></p>
-      <p>Owner access verified. Booking management can be added next.</p>
-    </div>
-  </div>
-</section>
 <section id="payment">
   <h2>Payments</h2>
   <div class="card"><h3>Paystack</h3><p>Online payment will be enabled after secure Paystack checkout and payment verification are configured. Do not use this preview to collect real payments yet.</p></div>
@@ -325,14 +301,16 @@ customerForm.addEventListener('submit', async event => {
   }
 
   const data = new FormData(customerForm);
-  const { error } = await supabaseClient.auth.signInWithPassword({
+  const { data: authData, error } = await supabaseClient.auth.signInWithPassword({
     email: String(data.get('email')).trim(),
     password: String(data.get('password'))
   });
 
-  customerMessage.textContent = error
-    ? 'Sign-in failed. Check your details and try again.'
-    : 'You are signed in.';
+  if (error) {
+    customerMessage.textContent = 'Sign-in failed. Check your details and try again.';
+    return;
+  }
+  await routeSignedInUser(authData.user);
 });
 
 document.getElementById('customerRegister').addEventListener('click', async () => {
@@ -398,107 +376,43 @@ document.getElementById('googleSignIn').addEventListener('click', async () => {
 document.getElementById('customerLogout').addEventListener('click', async () => {
   if (!supabaseClient) return;
   const { error } = await supabaseClient.auth.signOut();
+  ownerDashboard.hidden = true;
   customerMessage.textContent = error ? 'Logout failed.' : 'You have signed out.';
 });
 
-// Owner authentication: verify the database role after sign-in.
-const ownerForm = document.getElementById('ownerLoginForm');
-const ownerMessage = document.getElementById('ownerMessage');
-const ownerDashboard = document.getElementById('ownerDashboard');
+// Shared sign-in: owner accounts are routed by their database role.
+const ownerDashboard = document.createElement('div');
+ownerDashboard.id = 'ownerDashboard';
+ownerDashboard.className = 'card';
+ownerDashboard.hidden = true;
+ownerDashboard.innerHTML = '<h3>Owner Dashboard</h3><p id="ownerWelcome"></p><p>Owner access verified. Booking management can be added next.</p>';
+document.getElementById('account').appendChild(ownerDashboard);
 
-async function verifyOwner() {
-  ownerDashboard.hidden = true;
-
-  if (!supabaseClient) return false;
-
-  const { data: sessionData, error: sessionError } =
-    await supabaseClient.auth.getSession();
-
-  const user = sessionData?.session?.user;
-
-  if (sessionError || !user) {
-    ownerMessage.textContent = 'Please sign in with an owner account.';
-    return false;
-  }
-
+async function routeSignedInUser(user) {
+  if (!user || !supabaseClient) return;
   const { data: profile, error } = await supabaseClient
-    .from('profiles')
-    .select('role, full_name')
-    .eq('id', user.id)
-    .single();
-
-  if (error || profile?.role !== 'owner') {
-    await supabaseClient.auth.signOut();
-    ownerMessage.textContent =
-      'Access denied. This account is not authorized as an owner.';
-    return false;
+    .from('profiles').select('role, full_name').eq('id', user.id).maybeSingle();
+  if (error) {
+    customerMessage.textContent = 'Signed in, but your account role could not be checked. Please try again.';
+    return;
   }
-
-  ownerMessage.textContent = 'Owner access verified.';
-  document.getElementById('ownerWelcome').textContent =
-    'Welcome, ' + (profile.full_name || user.email);
-  ownerDashboard.hidden = false;
-  return true;
+  if (profile?.role === 'owner') {
+    ownerDashboard.hidden = false;
+    document.getElementById('ownerWelcome').textContent = 'Welcome, ' + (profile.full_name || user.email);
+    customerMessage.textContent = 'Owner access verified.';
+  } else {
+    ownerDashboard.hidden = true;
+    customerMessage.textContent = 'You are signed in.';
+  }
 }
 
-ownerForm.addEventListener('submit', async event => {
-  event.preventDefault();
-
-  if (!supabaseClient) {
-    ownerMessage.textContent = 'Supabase connection is unavailable.';
-    return;
-  }
-
-  const data = new FormData(ownerForm);
-  ownerMessage.textContent = 'Signing in...';
-
-  const { error } = await supabaseClient.auth.signInWithPassword({
-    email: String(data.get('email')).trim(),
-    password: String(data.get('password'))
-  });
-
-  if (error) {
-    ownerMessage.textContent =
-      'Sign-in failed. Check your credentials or reset your password.';
-    return;
-  }
-
-  await verifyOwner();
-});
-
-document.getElementById('ownerReset').addEventListener('click', async () => {
-  if (!supabaseClient) {
-    ownerMessage.textContent = 'Supabase connection is unavailable.';
-    return;
-  }
-  const email = String(new FormData(ownerForm).get('email') || '').trim();
-  if (!email) {
-    ownerMessage.textContent = 'Enter your owner email address first.';
-    return;
-  }
-  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin + window.location.pathname
-  });
-  ownerMessage.textContent = error
-    ? 'Password recovery could not be started. Please try again later.'
-    : 'If this email is registered, password recovery instructions will be sent.';
-});
-
-document.getElementById('ownerLogout').addEventListener('click', async () => {
-  if (!supabaseClient) return;
-
-  const { error } = await supabaseClient.auth.signOut();
-  ownerDashboard.hidden = true;
-  ownerMessage.textContent = error
-    ? 'Logout failed.'
-    : 'You have signed out.';
-});
-
 if (supabaseClient) {
+  supabaseClient.auth.getSession().then(({data}) => {
+    if (data?.session?.user) routeSignedInUser(data.session.user);
+  });
   supabaseClient.auth.onAuthStateChange((event, session) => {
-    if (!session) {
-      ownerDashboard.hidden = true;
-    }
+    if (session?.user) routeSignedInUser(session.user);
+    else ownerDashboard.hidden = true;
   });
 }
 </script>
