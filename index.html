@@ -256,7 +256,12 @@ document.getElementById('bookingForm').addEventListener('submit', async event =>
     return;
   }
 
+  const { data: userData, error: userError } = await supabaseClient.auth.getUser();
+  const signedInUser = userData?.user;
+  if (userError || !signedInUser) { message.textContent = 'Please sign in or create a customer account before booking.'; document.getElementById('account').scrollIntoView({behavior:'smooth'}); return; }
+
   const booking = {
+    customer_id: signedInUser.id,
     customer_name: String(data.get('customer_name')).trim(),
     customer_phone: String(data.get('customer_phone')).trim(),
     customer_email: String(data.get('customer_email')).trim(),
@@ -385,8 +390,28 @@ const ownerDashboard = document.createElement('div');
 ownerDashboard.id = 'ownerDashboard';
 ownerDashboard.className = 'card';
 ownerDashboard.hidden = true;
-ownerDashboard.innerHTML = '<h3>Owner Dashboard</h3><p id="ownerWelcome"></p><p>Owner access verified. Booking management can be added next.</p>';
+ownerDashboard.innerHTML = '<h3>Owner Dashboard</h3><p id="ownerWelcome"></p><div class="actions"><button type="button" id="refreshBookings">Refresh Bookings</button></div><p id="ownerBookingMessage" role="status" aria-live="polite"></p><div id="ownerBookings" aria-live="polite"></div>';
 document.getElementById('account').appendChild(ownerDashboard);
+document.getElementById('refreshBookings').addEventListener('click', loadOwnerBookings);
+
+async function loadOwnerBookings() {
+  const list = document.getElementById('ownerBookings');
+  const status = document.getElementById('ownerBookingMessage');
+  if (!supabaseClient) { status.textContent = 'Booking service is unavailable.'; return; }
+  status.textContent = 'Loading bookings…'; list.replaceChildren();
+  const { data: rows, error } = await supabaseClient.from('bookings').select('id, customer_name, customer_phone, customer_email, service_name, booking_type, scheduled_at, address, notes, status, created_at').order('scheduled_at', { ascending: true });
+  if (error) { console.error('Owner booking fetch failed:', error); status.textContent = 'Could not load bookings. Check owner access and booking-table policies.'; return; }
+  if (!rows || !rows.length) { status.textContent = 'No bookings found yet.'; return; }
+  status.textContent = rows.length + ' booking(s)';
+  rows.forEach(booking => {
+    const card = document.createElement('article'); card.className = 'card'; card.style.margin = '12px 0';
+    const title = document.createElement('h3'); title.textContent = booking.customer_name || 'Customer booking'; card.appendChild(title);
+    const details = document.createElement('p'); details.textContent = [booking.service_name || 'Service not specified', booking.booking_type || 'Appointment', new Date(booking.scheduled_at).toLocaleString(), booking.customer_phone, booking.customer_email, booking.address, booking.notes].filter(Boolean).join(' · '); card.appendChild(details);
+    const statusLabel = document.createElement('label'); statusLabel.textContent = 'Status: '; const select = document.createElement('select'); select.setAttribute('aria-label', 'Booking status');
+    ['pending','confirmed','completed','cancelled'].forEach(value => { const option = document.createElement('option'); option.value = value; option.textContent = value[0].toUpperCase() + value.slice(1); option.selected = booking.status === value; select.appendChild(option); }); statusLabel.appendChild(select); card.appendChild(statusLabel);
+    const save = document.createElement('button'); save.type = 'button'; save.textContent = 'Save Status'; save.style.marginLeft = '8px'; save.addEventListener('click', async () => { save.disabled = true; status.textContent = 'Saving booking status…'; const { error: updateError } = await supabaseClient.from('bookings').update({ status: select.value }).eq('id', booking.id); save.disabled = false; if (updateError) { console.error('Booking status update failed:', updateError); status.textContent = 'Could not update status. Please retry.'; return; } booking.status = select.value; status.textContent = 'Booking status updated.'; }); card.appendChild(save); list.appendChild(card);
+  });
+}
 
 async function routeSignedInUser(user) {
   if (!user || !supabaseClient) return;
@@ -400,6 +425,7 @@ async function routeSignedInUser(user) {
     ownerDashboard.hidden = false;
     document.getElementById('ownerWelcome').textContent = 'Welcome, ' + (profile.full_name || user.email);
     customerMessage.textContent = 'Owner access verified.';
+    await loadOwnerBookings();
   } else {
     ownerDashboard.hidden = true;
     customerMessage.textContent = 'You are signed in.';
